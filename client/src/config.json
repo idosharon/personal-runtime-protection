@@ -1,0 +1,34 @@
+{
+  "description": "Basic ebpfs programs used to track execve, open, openat, tcp_accept",
+  "ebpf_config": {
+    "folder": "ebpfs",
+    "files": {
+      "execv.c": {
+        "description": "execve() system call",
+        "header": "ebpf_config.h",
+        "functions": [
+          {
+            "name": "syscall__execve",
+            "syscall": "execve",
+            "type": "kprobe"
+          }
+        ],
+        "signature": ""
+      },
+      "open.c": {
+        "description": "open() & openat() system call",
+        "functions": [
+          {
+            "name": "syscall__open",
+            "syscall": "open"
+          },
+          {
+            "name": "syscall__openat",
+            "syscall": "openat"
+          }
+        ],
+        "signature": ""
+      }
+    }
+  }
+}
