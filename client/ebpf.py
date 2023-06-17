@@ -1,7 +1,6 @@
 import enum
 import json
 import logging
-import base64
 import socket
 import threading
 import time
@@ -15,150 +14,141 @@ from .logger import Logger
 from .config import Config
 
 
+# each ebpf program is for a specific syscall
 class EBPFProgram:
-    CHUNK_SIZE = 10
-
     # TODO: generate header file from this
     class EventType:
         EVENT_ARG = 0
         EVENT_RET = 1
 
     def __init__(self, src_file: Path, ebpf_config: dict, host: str = "localhost", port: int = 1234):
+        # sourcery skip: raise-specific-error
         try:
             # connect to socket of manager
             Logger.info(f"Connecting to {host}:{port}...")
             self._client = socket.socket(family=socket.AF_INET, type=socket.SOCK_DGRAM)
             self._client.connect((host, port))
 
-            print("compiling ebpf program...")
+            self._syscall = ebpf_config.get("syscall", src_file.stem)
+            self._attach_types = ebpf_config.get("types", [])
 
             self.src_file = src_file
             self.header_file = ebpf_config.get("header", "")
             if self.header_file:
                 self.header_file = (src_file.parent / self.header_file)
-                if not self.header_file.is_file():
+                if not self.header_file.exists() or not self.header_file.is_file():
                     Logger.warning(f"Header file not found: {self.header_file}")
-                else:
-                    self._generate_header()
+                # else:
+                #     self._generate_header()
 
+            Logger.info(f"Compiling {src_file}...")
             self._bpf = BPF(src_file=str(self.src_file),
-                            hdr_file=str(self.header_file),
                             cflags=["-Wno-everything"])
-
-            # threading.Thread(target=self._pull_events_thread).start()
-
+            
             self._sending_queue = queue.Queue()
             self._sending_thread = threading.Thread(target=self._sending_thread)
             self._sending_thread.start()
 
+            self._poll_loop_thread = threading.Thread(target=self.buffer_poll_loop)
+
             self._events = {}
             self.start_ts = time.time()
 
-            for fn in ebpf_config.get("functions", [{}]):
-                try:
-                    Logger.info(f"Attaching {fn['type']}: {self._bpf.get_syscall_fnname(fn['syscall'])} {fn['name']}")
+            try:
+                event_name = self._bpf.get_syscall_fnname(self._syscall)
+                print(f"Attaching to {self._attach_types} {event_name}...")
 
-                    function_name, event_name = fn["name"], self._bpf.get_syscall_fnname(fn["syscall"])
+                for attach_type in self._attach_types:
+                    if attach_type == "kprobe":
+                        self._bpf.attach_kprobe(event=event_name, fn_name=f"syscall__kprobe_{self._syscall}")
+                    elif attach_type == "kretprobe":
+                        self._bpf.attach_kretprobe(event=event_name, fn_name=f"syscall__kretprobe_{self._syscall}")
+                    elif attach_type == "tracepoint":
+                        self._bpf.attach_tracepoint(tp=f"syscalls:{self._syscall}", fn_name=f"syscall__tracepoint_{self._syscall}")
+                    else: 
+                        raise Exception(f"Invalid attach type: {attach_type}")
 
-                    if fn['type'] == "kprobe":
-                        self._bpf.attach_kprobe(event=event_name, fn_name=function_name)
-                    elif fn['type'] == "kretprobe":
-                        self._bpf.attach_kretprobe(event=event_name, fn_name=function_name)
-                    else:
-                        raise Exception(f"Unknown type: {fn['type']}")
+                # self._bpf.trace_print()
+                self.attach_callback()
 
-                    self._events[fn["syscall"]] = {}
-                    self.attach_callback(fn["syscall"])
-                except Exception as e:
-                    Logger.warning(e)
-                    continue
+                print("🐙 Loaded eBPF program from file: ", src_file)
 
-            print("🐙 Loaded eBPF program from file: ", src_file)
+            except Exception as e:
+                Logger.error(e)
 
         except Exception as e:
             print(f"Failed to compile ebpf program: {e}")
 
-    # function that sends a given data chunk to server using a socket
-    def _send(self, data: bytes):
+    def _send(self, event):
         try:
-            self._client.send(data)
+            self._client.send(event)
         except Exception as e:
             Logger.error(e)
 
     def _sending_thread(self):
         print("Starting queue thread...")
         while True:
-            data = self._sending_queue.get()
-            if data:
-                print("sending data: {}".format(data))
-                self._send(data)
+            if event := self._sending_queue.get():
+                self._send(event)
 
-    def _generate_callback(self, syscall):
-        def callback(cpu, data, size):
-            try:
-                event = self._bpf[f"{syscall}"].event(data)
+    def _event_to_dict(self, event) -> dict:
+        return {
+            "ts": event.ts,
+            "since": time.time() - self.start_ts,
+            "ppid": event.ppid,
+            "uid": event.uid,
+            "comm": event.comm.decode("utf-8"),
+            "value": event.value.decode("utf-8"),
+            "args": [event.argv.decode("utf-8")] if event.argv else [],
+        }
 
-                print("event: ", event.type)
+    def callback(self, cpu, data, size):
+        try:
+            event = self._bpf[self._syscall].event(data)
+            pid = event.pid
 
-                if event.type == self.EventType.EVENT_ARG:
-                    pid = event.pid
+            if event.type == self.EventType.EVENT_ARG:
+                if pid in self._events.keys():
+                    if event.argv:
+                        self._events[pid]["args"].append(event.argv.decode("utf-8"))
+                else:
+                    self._events[pid] = self._event_to_dict(event)
+            elif event.type == self.EventType.EVENT_RET:
+                if pid not in self._events.keys():
+                    # Logger.warning(f"Missing event for pid {pid}")
+                    self._events[pid] = self._event_to_dict(event)
 
-                    if pid in self._events[syscall].keys():
-                        self._events[syscall][pid]["args"].append(event.argv.decode("utf-8"))
-                    else:
-                        self._events[syscall][pid] = {
-                            "ts": event.ts,
-                            "since": time.time() - self.start_ts,
-                            "ppid": event.ppid,
-                            "uid": event.uid,
-                            "comm": event.comm,
-                            "path": event.path.decode("utf-8"),
-                            "args": [event.argv.decode("utf-8")] if event.argv else [],
+                self._sending_queue.put(
+                    json.dumps({
+                        "syscall": self._syscall,
+                        "pid": pid,
+                        "ret": event.return_value,
+                        "data": self._events[pid]
+                    }).encode("utf-8"))
 
-                            # TODO: maybe in future
-                            #  "cpu": cpu,
-                            # "size": size,
-                        }
+                del(self._events[pid])
 
-                elif event.type == self.EventType.EVENT_RET:
-                    self._sending_queue.put(
-                        json.dumps({
-                            "type": syscall,
-                            "ret": event.return_value,
-                            "data": json.dumps(self._events[syscall])
-                        }).encode("utf-8"))
+        except Exception as e:
+            Logger.error(e)
+            print("Failed to parse event data: ", self._events)
+            return
 
-                    self._events[syscall] = {}
-
-
-            except Exception as e:
-                Logger.error(e)
-                return
-
-        return callback
-
-    def attach_callback(self, syscall: str):
-        self._bpf[f"{syscall}"].open_perf_buffer(self._generate_callback(syscall))
+    def buffer_poll_loop(self):
         while True:
             try:
                 self._bpf.perf_buffer_poll()
             except KeyboardInterrupt:
-                exit()
+                break
+
+    def attach_callback(self):
+        self._bpf[self._syscall].open_perf_buffer(self.callback)
+        self._poll_loop_thread.start()
 
     def clean(self):
         self._bpf.cleanup()
 
     def _generate_header(self):
-        # wrtie header file
-        header = """
-        enum event_type {
-            EVENT_ARG = 0,
-            EVENT_RET = 1,
-        };"""
-
-        with open(self.header_file, "w") as f:
-            f.write(header)
-            f.close()
+        pass
 
 
 class EBPFLoader:

@@ -3,30 +3,23 @@
   "ebpf_config": {
     "folder": "ebpfs",
     "files": {
-      "execv.c": {
+      "execve.c": {
+        "types": ["kprobe", "kretprobe"],
         "description": "execve() system call",
         "header": "ebpf_config.h",
-        "functions": [
-          {
-            "name": "syscall__execve",
-            "syscall": "execve",
-            "type": "kprobe"
-          }
-        ],
         "signature": ""
       },
-      "open.c": {
+      "_openat.c": {
+        "types": ["kprobe"],
         "description": "open() & openat() system call",
-        "functions": [
-          {
-            "name": "syscall__open",
-            "syscall": "open"
-          },
-          {
-            "name": "syscall__openat",
-            "syscall": "openat"
-          }
-        ],
+        "header": "ebpf_config.h",
+        "signature": ""
+      },
+      "_tcp_v4_accept.c": {
+        "types": ["kretprobe"],
+        "syscall": "inet_csk_accept",
+        "description": "tcp v4 accept() system call",
+        "header": "ebpf_config.h",
         "signature": ""
       }
     }
