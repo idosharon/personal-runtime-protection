@@ -5,7 +5,7 @@
 PRP - Personal Runtime Protection, is an open-source, and very basic client-server program that (as I hope) is the start of a big and important
 project designed to give your linux based computer the power of runtime protection using eBPF.
 
-<img src="images/homepage.jpg" />
+<img src="images/homepage.png" />
 
 ## Installation
 
