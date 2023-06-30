@@ -18,7 +18,7 @@
   </p>
   <a href="https://github.com/idosharon/personal-runtime-protection" class="btn btn-secondary" download>Download Client from Github</a>
   <hr>
-  <h2>Observability & Detection</h2>
+  <h2>Detection</h2>
   <p>
     When client is installed and connected to the server, you can go to the dashboard to see the current status of your computer.
   </p>
