@@ -1,9 +1,6 @@
 <img src="https://i.ibb.co/80xwYbG/logo.png" alt="drawing" width="100"/>
 
 # Personal Runtime Protection
-[![NPM Version][npm-image]][npm-url]
-[![Build Status][travis-image]][travis-url]
-[![Downloads Stats][npm-downloads]][npm-url]
 
 PRP - Personal Runtime Protection, is an open-source, and very basic client-server program that (as I hope) is the start of a big and important
 project designed to give your linux based computer the power of runtime protection using eBPF.
@@ -18,28 +15,9 @@ cd server/frontend
 npm install
 ```
 
-## Usage example
+### Development setup
 
-A few motivating and useful examples of how your product can be used. Spice this up with code blocks and potentially more screenshots.
-
-_For more examples and usage, please refer to the [Wiki][wiki]._
-
-## Development setup
-
-Describe how to install all development dependencies and how to run an automated test-suite of some kind. Potentially do this for multiple platforms.
-
-```sh
-make install
-npm test
-```
-
-## Book
-
-Your Name – [@YourTwitter](https://twitter.com/dbader_org) – YourEmail@example.com
-
-Distributed under the XYZ license. See ``LICENSE`` for more information.
-
-[https://github.com/yourname/github-link](https://github.com/dbader/)
+As a developer feel free to edit & change everything in this project, the project tries to be as configurable as possible, see for example the client/config.json file.
 
 ## Contributing
 
