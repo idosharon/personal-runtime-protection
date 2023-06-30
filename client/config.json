@@ -1,0 +1,42 @@
+{
+  "name": "default",
+  "description": "Basic ebpfs programs used to track execve, open, openat, tcp_accept",
+  "ebpf_config": {
+    "folder": "ebpfs",
+    "files": {
+      "execve.c": {
+        "types": ["kretprobe"],
+        "description": "execve() system call",
+        "signature": "6afeee33bb20b7e4ddc4a9ba9ef11486f4ba50dc81bccbc2719d59393a5ac914",
+        "value_type": "string",
+        "filters": {
+          "ignored_processes": ["cpuUsage.sh", ""],
+          "ignored_values": []
+        }
+      },
+      "openat.c": {
+        "types": ["kprobe"],
+        "description": "open() & openat() system call",
+        "signature": "95e2f6168ed453e4af30c26e78c789a2e5ba9d2b5a0ccc6ca9fe045deb24c139",
+        "value_type": "string",
+        "filters": {
+          "ignored_processes": ["systemd", "tracker-miner-f", "gvfs-udisks2-vo", "gvfsd-trash", "Cache2 I/O", 
+                                "gsd-housekeepin", "Compositor", "Chrome_IOThread", "gnome-terminal-", "xdg-desktop-por", "dbus-daemon", ""],
+          "ignored_values": ["/home/idosharon/Dev/personal/runtime-protection", "/proc/.+"]
+        }
+      },
+      "tcpaccept.c": {
+        "types": ["kretprobe"],
+        "syscall": "inet_csk_accept",
+        "auto_attach": true,
+        "description": "tcp v4 & v6 accept() system call",
+        "signature": "99218c4a6d94707e014f2abb520078d5221e22d3cee5303c62497266b86ed3ab",
+        "value_type": "ipv4",
+        "filters": {
+          "ignored_processes": ["flask", ""],
+          "ignored_values": []
+        }
+      }
+    }
+  }
+}
